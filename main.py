@@ -12,12 +12,27 @@ os.environ.setdefault("GROQ_API_KEY", GROQ_API_KEY)
 # pip install crewai==1.6.1 crewai-tools==1.6.1 langchain-groq==0.1.3
 
 from crewai import Agent, Task, Crew, Process
+from crewai.llm import LLM as CrewLLM
 from crewai.tools import BaseTool
 from langchain_groq import ChatGroq
 from pydantic import BaseModel, Field
 from typing import Type
 
-llm = ChatGroq(model=MODEL_NAME, temperature=TEMPERATURE)
+# Support a test mode where an offline Dummy LLM is used to avoid external API calls
+if os.getenv("TEST_MODE", "0") in ("1", "true", "True"):
+    class DummyLLM(CrewLLM):
+        def __init__(self, model: str | None = None, temperature: float = 0.2, **kwargs):
+            # Don't forward is_litellm to super().__init__ (it's handled in __new__)
+            super().__init__(model=model or "dummy", temperature=temperature, **kwargs)
+        def call(self, *args, **kwargs):
+            return "DUMMY RESPONSE"
+        async def acall(self, *args, **kwargs):
+            return "DUMMY RESPONSE"
+    # Use a dummy model name so crewai doesn't attempt to import a native provider
+    # Set is_litellm=True so the LLM base class doesn't attempt to load native providers
+    llm = DummyLLM(model="dummy", temperature=TEMPERATURE, is_litellm=True)
+else:
+    llm = ChatGroq(model=MODEL_NAME, temperature=TEMPERATURE)
 
 # ——— Tools ———
 class PolicyQuery(BaseModel):
